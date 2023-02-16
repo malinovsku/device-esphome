@@ -1,0 +1,138 @@
+substitutions:
+  device_name: kyxna-kettle
+  device_name2: kyxna_kettle
+  device_name_wifi: kyxnttle
+  gate: Gate
+  mac_kettle: !secret mac_kettle
+  model_kettle: RK-G210S
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+packages:
+  device_base: !include config-base.yaml
+
+globals:
+  - id: ves_dlia_chaynik
+    type: float
+    initial_value: '0.4'
+
+# logger:
+#   level: NONE
+
+external_components:
+  - source: github://KomX/ESPHome-Ready4Sky/components
+
+time:
+  platform: homeassistant 
+
+ready4sky:
+  id: my_ble_gate
+  scan_parameters:
+    monitor: false
+    interval: 150 ms 
+    window: 50 ms
+    duration: 30 s
+    active: false
+
+button:
+  - platform: template ### включение или выключение режима поиска новых устройст
+    name: ${device_name2}_scan_new_devices
+    icon: mdi:magnify
+    entity_category: config
+    on_press:
+      - lambda: |-
+          id(my_ble_gate).set_monitor(!id(my_ble_gate).get_monitor());
+
+
+
+skykettle:
+  - mac_address: ${mac_kettle}
+    model: ${model_kettle}
+    cup_volume: 250
+    cup_correction: 1.0
+    informing:
+      temperature:
+        name: ${device_name2}_temperature
+      # cup_quantity:
+      #   name: ${device_name2} Cup(s)
+      # water_volume:
+      #   name: ${device_name2} Water Volume
+      signal_strength:
+        name: ${device_name2}_ble_rssi
+      energy:
+        name: ${device_name2}_energy
+      work_cycles:
+        name: ${device_name2}_work_cycles
+      # work_time:
+      #   name: ${device_name2} Work Time
+      # status_indicator:
+      #   name: ${device_name2} Status
+    controlling:
+      power:
+        name: ${device_name2}
+      target_temperature:
+        name: ${device_name2}_target_temperature
+      boil_time_adjustment:   ### ВНИМАНИЕ! ### Все последующие органы управления не работают с моделями RK-M17xS.
+        name: ${device_name2}_boil_adj
+      state_led:
+        name: ${device_name2}_state_led
+      # background_light:
+      #   name: ${device_name2} Night Light
+      # beeper:
+      #   name: ${device_name2} Beeper
+
+
+
+
+
+binary_sensor:
+  - platform: template
+    name: ${device_name2}_water
+    entity_category: ''
+    icon: "mdi:cup-water"
+    id: obnovl_pr
+    lambda: |-
+          if (id(sensor_hx711_d).state > id(ves_dlia_chaynik)) {   
+            return true;
+            }
+          else {
+            return false;
+            }
+    on_state:
+      then:
+        - sensor.template.publish:
+            id: sensor_hx711_p
+            state: !lambda 'return id(sensor_hx711_d).state;'
+
+sensor:
+  - platform: hx711
+    dout_pin: 19
+    id: sensor_hx711_d
+    name: ${device_name2}
+    clk_pin: 18
+    internal: true
+    gain: 128
+    update_interval: 1s
+    filters:
+      - calibrate_linear:
+          - 119372 -> 0
+          - 245240 -> 0.5
+          - 372689 -> 1
+
+  - platform: template
+    name: ${device_name2} scales
+    id: sensor_hx711_p
+    entity_category: ''
+    icon: "mdi:scale"
+    unit_of_measurement: "kg"
+    lambda: |-
+          if (id(sensor_hx711_d).state > 0) {   
+            return id(sensor_hx711_d).state;
+            }
+          else {
+            return 0;
+            }
+    update_interval: 30s

@@ -1,0 +1,68 @@
+esphome:
+  name: ${device_name}
+  name_add_mac_suffix: false
+
+api:
+  reboot_timeout: 50min
+  encryption:
+    key: !secret api_key_tok
+ota:
+  password: !secret ota_api_password
+  reboot_timeout: 50min
+
+logger:
+
+wifi:
+  ssid: !secret wiwi_ssid
+  password: !secret wiwi_pass
+  fast_connect: on
+  reboot_timeout: 50min
+  ap:
+    ssid: ${device_name_wifi}
+    password: !secret wiwi_ap_pass
+
+captive_portal:
+
+sensor:
+  - platform: wifi_signal
+    name: ${device_name2} wifi signal esp
+    update_interval: 60s
+    entity_category: diagnostic
+
+  - platform: uptime
+    id: uptime_sensor
+    update_interval: 5min
+    on_raw_value:
+      then:
+        - text_sensor.template.publish:
+            id: uptime_esp
+            state: !lambda |-
+              int seconds = round(id(uptime_sensor).raw_state);
+              int days = seconds / (24 * 3600);
+              seconds = seconds % (24 * 3600);
+              int hours = seconds / 3600;
+              seconds = seconds % 3600;
+              int minutes = seconds /  60;
+              seconds = seconds % 60;
+              return (
+                (days ? String(days) + "d " : "") +
+                (hours ? String(hours) + "h " : "") +
+                (String(minutes) + "m")
+              ).c_str();
+
+button:
+  - platform: restart
+    name: ${device_name2} restart esp
+    entity_category: diagnostic
+
+binary_sensor:
+  - platform: status
+    name: ${device_name2} status esp
+    entity_category: diagnostic
+
+text_sensor:
+  - platform: template
+    name: ${device_name2} uptime esp
+    id: uptime_esp
+    icon: mdi:clock-start
+    entity_category: diagnostic
