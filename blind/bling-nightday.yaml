@@ -1,7 +1,7 @@
 substitutions:
-  device_name: bling-nightday    # имя устройство на англ, между словами использовать "-"
-  entity_name: bling_nightday    # такое же как device_name, но между словами использовать "_"
-  entity_friendly_name: bling nightday    # такое же как device_name, возможны пробелы
+  device_name: blind-window    # имя устройство на англ, между словами использовать "-"
+  entity_name: blind_window    # такое же как device_name, но между словами использовать "_"
+  entity_friendly_name: blind window    # такое же как device_name, возможны пробелы
   device_name_wifi: blind-window    # Наименование WiFi captive_portal для настройки 
   device_pass_wifi: !secret wifi_ap_pass    # Пароль от WiFi captive_portal
   device_class_cover: shade    # класс устройства cover
@@ -111,10 +111,10 @@ globals:
 
 button:
   - platform: restart
-    name: ${entity_friendly_name} restart esp
+    name: Restart esp
     entity_category: diagnostic
   - platform: template
-    name: ${entity_friendly_name} Next Setup
+    name: Next Setup
     id: button_setup
     icon: mdi:cog-play
     entity_category: config
@@ -127,7 +127,7 @@ button:
 
 switch:
   - platform: template
-    name: ${entity_friendly_name} Setup
+    name: Setup position
     id: setupswitch
     entity_category: config
     icon: mdi:cog
@@ -151,7 +151,7 @@ switch:
             value: '0'
         - cover.stop: blinded
   - platform: template
-    name: ${entity_friendly_name} Invert Position Setup
+    name: Invert Position Setup
     entity_category: config
     id: invert_pos
     disabled_by_default: true
@@ -159,28 +159,47 @@ switch:
     optimistic: true
     turn_on_action:
       then:
-        - logger.log: "Press On Invert Position"
-        - cover.stop: blinded
-        - delay: 350 ms
-        - globals.set:
-            id: settingmode
-            value: '1'
-        - delay: 350 ms
-        - script.execute: setupbutton
+        - if:
+            condition:
+              - lambda: 'return id(settingmode) > 0;'
+            then:
+              - logger.log: "Press On Invert Position"
+              - cover.stop: blinded
+              - delay: 350 ms
+              - globals.set:
+                  id: settingmode
+                  value: '1'
+              - delay: 350 ms
+              - script.execute: setupbutton
     turn_off_action:
       then:
-        - logger.log: "Press Off Invert Position"
-        - cover.stop: blinded
-        - delay: 350 ms
-        - globals.set:
-            id: settingmode
-            value: '1'
-        - delay: 350 ms
-        - script.execute: setupbutton
+        - if:
+            condition:
+              - lambda: 'return id(settingmode) > 0;'
+            then:
+              - logger.log: "Press Off Invert Position"
+              - cover.stop: blinded
+              - delay: 350 ms
+              - globals.set:
+                  id: settingmode
+                  value: '1'
+              - delay: 350 ms
+              - script.execute: setupbutton
 
 number:
   - platform: template
-    name: ${entity_friendly_name} Speed Stepper
+    name: DayNight Position
+    optimistic: true
+    icon: mdi:weather-night
+    entity_category: config
+    id: num_custom_pos
+    mode: box
+    min_value: 0
+    max_value: 100
+    restore_value: true
+    step: 0.1
+  - platform: template
+    name: Speed Stepper
     optimistic: true
     entity_category: config
     disabled_by_default: true
@@ -201,7 +220,7 @@ number:
 
 cover:
   - platform: template
-    name: ${entity_friendly_name}
+    name: Cover
     id: blinded
     open_action:
       then:
@@ -225,12 +244,25 @@ cover:
             id: blinded
             position: !lambda 'return (float(float(id(my_stepper).current_position) / float(id(endstop))));' 
             current_operation: IDLE
+    tilt_action:
+      then:
+        - if:
+            condition:
+              - lambda: 'return (tilt > 0.5);'
+            then:
+              - cover.control:
+                  id: blinded
+                  position: !lambda return (id(num_custom_pos).state / 100);
+            else:
+              - cover.control:
+                  id: blinded
+                  position: 0
     has_position: true
     device_class: ${device_class_cover}
 
 sensor:
   - platform: wifi_signal
-    name: ${entity_friendly_name} wifi signal esp
+    name: Wifi signal esp
     update_interval: 60s
     entity_category: diagnostic
   - platform: uptime
@@ -256,12 +288,12 @@ sensor:
 
 binary_sensor:
   - platform: status
-    name: ${entity_friendly_name} status esp
+    name: Status esp
     entity_category: diagnostic
 
 text_sensor:
   - platform: template
-    name: ${entity_friendly_name} uptime esp
+    name: Uptime esp
     id: uptime_esp
     icon: mdi:clock-start
     entity_category: diagnostic
