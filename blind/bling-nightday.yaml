@@ -1,7 +1,7 @@
 substitutions:
   device_name: blind-window    # имя устройство на англ, между словами использовать "-"
   entity_name: blind_window    # такое же как device_name, но между словами использовать "_"
-  entity_friendly_name: blind window    # такое же как device_name, возможны пробелы
+  friendly_name: blind window    # такое же как device_name, возможны пробелы
   device_name_wifi: blind-window    # Наименование WiFi captive_portal для настройки 
   device_pass_wifi: !secret wifi_ap_pass    # Пароль от WiFi captive_portal
   device_class_cover: shade    # класс устройства cover
