@@ -1,0 +1,445 @@
+substitutions:
+  device_name: koridor-matrix-display
+  entity_name: koridor_matrix_display
+  friendly_name: koridor matrix display
+  device_name_wifi: koridormatrixdisplay
+
+external_components:
+  - source:
+      type: git
+      url: https://github.com/lubeda/EspHoMaTriXv2
+      ref: 2023.9.1
+    refresh: 60s 
+    components: [ ehmtxv2 ]  
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+web_server:
+  port: 80
+
+packages:
+  device_base: !include .config-base-new.yaml
+
+image:
+   - file: fonts/1pixel.gif
+     id: breaking20237
+
+animation:
+  - file: fonts/1pixel.gif
+    id: breaking202371
+
+esphome:
+  comment: "EHMTXv2"
+  project:
+    name: "Matrix.EHMTXv2"
+    version: "2.0.0"
+  on_boot:
+    then:
+      - ds1307.read_time:
+
+i2c:
+  sda: GPIO22
+  scl: GPIO23
+
+dallas:
+  - pin: 26
+
+interval:
+  - interval: 1h
+    then:
+      - script.execute: put_day_clock
+
+script:
+  - id: put_infotext_color
+    mode: restart
+    then:
+      - lambda:
+          id(rgb8x32).set_infotext_color(0, 0, 0, 0, 0, 0, false, 2);
+
+  - id: put_day_clock
+    mode: restart
+    then:
+      - lambda: id(put_day_clock_param)->execute(id(calendar_color).state);
+
+  - id: put_day_clock_param
+    mode: restart
+    parameters:
+      color: string
+    then:
+      - lambda:
+          if (id(ehmtx_time).now().day_of_month < 10) {
+            id(rgb8x32).icon_clock(color + "|day#5",120,3);
+          } else if (id(ehmtx_time).now().day_of_month < 20) {
+            id(rgb8x32).icon_clock(color + "|day#1",120,3);
+          } else {
+            id(rgb8x32).icon_clock(color + "|day#2",120,3);
+          }
+
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: 33
+      mode:
+        input: true
+        pullup: true
+    name: button1
+  - platform: gpio
+    pin:
+      number: 5
+      mode:
+        input: true
+        pullup: true
+    name: button2
+    on_press:
+      then:
+        - switch.toggle: sw_matrix
+  - platform: gpio
+    pin:
+      number: 18
+      mode:
+        input: true
+        pullup: true
+    name: button3
+    on_press:
+      - button.press: next_scr
+  - platform: gpio
+    pin:
+      number: 19
+      mode:
+        input: true
+        pullup: true
+    name: button4
+
+sensor:
+  - platform: dallas
+    address: 0xd93ce1e38045d228
+    name: Led Temperature
+    id: led_temp
+  - platform: bh1750
+    name: Illuminance
+    address: 0x23
+    update_interval: 2s
+    id: illum
+    on_value:
+      then:
+        - if:
+            condition:
+              switch.is_on: auto_br
+            then:
+              - lambda: |-
+                  auto call = id(num_brgh).make_call();
+                  if (x < 1) {   
+                    call.set_value(50);
+                    }
+                  else if (x >= 1 and x < 5){
+                    call.set_value(150);
+                  }
+                  else {
+                    call.set_value(210);
+                  }
+                  call.perform();
+
+  - platform: homeassistant
+    id: current_temperature
+    entity_id: sensor.ulica_multisensor_temperature_optional  
+
+switch:
+  - platform: template
+    name: Display
+    icon: "mdi:power"
+    id: sw_matrix
+    restore_mode: RESTORE_DEFAULT_ON
+    lambda: |-
+      return id(rgb8x32)->show_display;
+    turn_on_action:
+      lambda: |-
+        id(rgb8x32)->set_display_on();
+    turn_off_action:
+      lambda: |-
+        id(rgb8x32)->set_display_off();
+
+  - platform: template
+    name: Auto brightnes
+    icon: mdi:brightness-auto
+    restore_mode: RESTORE_DEFAULT_ON
+    id: auto_br
+    optimistic: true
+
+number:
+  - platform: template
+    name: LED brightness
+    min_value: 0
+    max_value: 255
+    step: 1
+    id: num_brgh
+    lambda: |-
+      return id(rgb8x32)->get_brightness();
+    set_action:
+      lambda: |-
+        id(rgb8x32)->set_brightness(x);
+
+light:
+  - platform: neopixelbus
+    id: ehmtx_light
+    type: GRB
+    internal: false
+    variant: WS2812
+    pin: 21
+    num_leds: 256
+    # color_correct: [30%, 30%, 30%]
+    # gamma_correct: 2.0
+    name: Light
+    restore_mode: ALWAYS_OFF
+    on_turn_on:
+      lambda: |-
+         id(ehmtx_display)->set_enabled(false);
+    on_turn_off:
+       lambda: |-
+         id(ehmtx_display)->set_enabled(true);
+
+select:
+  - platform: template
+    name: Calendar icon
+    optimistic: true
+    restore_value: true
+    id: calendar_color
+    options:
+      - Calendar_red_white
+      - Calendar_blue_white
+    initial_option: Calendar_blue_white
+    set_action:
+      then:
+        - lambda: id(put_day_clock_param)->execute(x);
+
+button:
+  - platform: template
+    name: Next screen
+    id: next_scr
+    icon: mdi:skip-forward
+    on_press:
+      - lambda: id(rgb8x32)->skip_screen();
+
+time:
+  - platform: homeassistant
+    timezone: MSK-3
+    on_time_sync:
+      then:
+        ds1307.write_time:
+  - platform: ds1307
+    timezone: MSK-3
+    update_interval: never
+    id: ehmtx_time
+
+display:
+  - platform: addressable_light
+    id: ehmtx_display
+    addressable_light_id: ehmtx_light
+    width: 32
+    height: 8
+    pixel_mapper: |-
+      if (x % 2 == 0) {
+        return (x * 8) + y;
+      }
+      return (x * 8) + (7 - y);
+    rotation: 180°
+    update_interval: 16ms
+    auto_clear_enabled: true
+    lambda: |-
+      id(rgb8x32)->tick();
+      id(rgb8x32)->draw();
+
+font:
+  - file: fonts/EHMTXv2.ttf
+    size: 16
+    id: default_font
+    glyphs:  |
+      !?"%()+*=,-_.:°0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnÖÄÜöäüopqrstuvwxyz@<>ß§€/
+  # - file: font/LCD5x8HRU.ttf
+  #   size: 8
+  #   id: special_font
+  #   glyphs:  |
+  #     !?"%()+*=,-_.:°0123456789ЙЦУКЕНГШЩЗХЪФЫВАПРОЛДЖЭЯЧСМИТЬБЮ йцукенгшщзхъфывапролджэячсмитьбю@<>/
+
+  # - file: fonts/8/MatrixChunky8.ttf
+  #   id: default_font
+  #   glyphs:  |
+  #     ! "#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz°ЙЦУКЕНГШЩЗХЪФЫВАПРОЛДЖЭЯЧСМИТЬБЮйцукенгшщзхъфывапролджэячсмитьбю
+  #   size: 8
+
+  - file: fonts/6/MatrixChunky6.ttf
+    id: special_font
+    glyphs:  |
+      !АаБбВвГгҐґДдЕеЄєЖжЗзИиІіЇїЙйКкЛлМмНнОоПпРрСсТтУуФфХхЦцЧчШшЩщЬьЮюЯя "#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz°
+    size: 6
+
+color:
+  - id: graph_color
+    red: 100%
+    green: 70%
+    blue: 25%
+
+graph:
+  - id: ehmtx_graph
+    width: 32
+    height: 8
+    duration: 30min
+    border: false
+    traces:
+      - sensor: current_temperature
+        line_thickness:  1
+        color: graph_color  
+
+ehmtxv2:
+  display_graph: ehmtx_graph
+  id: rgb8x32
+  icons2html: true
+  matrix_component: ehmtx_display
+  time_component: ehmtx_time
+  time_format: "%H:%M"
+  date_format: "%d-%m"
+  show_seconds: false
+  weekdays: "ВСПНВТСРЧТПТСБ"
+  # Uncomment below if using the mateine font
+  # default_font_id: default_font
+  # special_font_id: default_font
+  # Comment out below if using mateine font
+  default_font_id: default_font
+  default_font_yoffset: 6
+  special_font_id: special_font
+  special_font_yoffset: 7
+  blend_steps: 0
+  icons: 
+    - id: error
+      lameid: 40530
+    - id: home_assistant
+      lameid: 47693
+    - id: temperature
+      lameid: 2056
+    - id: lightbulb
+      lameid: 1762
+    - id: music
+      lameid: 45625
+    - id: phone
+      lameid: 1232
+    - id: car
+      lameid: 2819
+    - id: sleep8x32
+      url: https://user-images.githubusercontent.com/16407309/224850723-634c9b2d-55d9-44f2-9f93-765c0485b090.gif 
+    - id: jackshome
+      url: https://awtrix.blueforcer.de/animations/Duckie
+      resize: 32x8
+
+
+
+    - id: weather_clear_night
+      lameid: 53383
+    - id: weather_cloudy
+      frame_duration: 192
+      lameid: 25991
+    - id: weather_exceptional
+      lameid: 16754
+    - id: weather_fog
+      lameid: 52167
+    - id: weather_hail
+      lameid: 53288
+    - id: weather_lightning
+      lameid: 23713
+    - id: weather_lightning_rainy
+      lameid: 49299
+    - id: weather_partlycloudy
+      frame_duration: 210
+      lameid: 22160
+    - id: weather_pouring
+      lameid: 49300
+    - id: weather_rainy
+      lameid: 26565
+    - id: weather_snowy
+      lameid: 2289
+    - id: weather_snowy_rainy
+      lameid: 49301
+    - id: weather_sunny
+      lameid: 11201
+    - id: weather_windy
+      lameid: 15618
+    - id: weather_windy_variant
+      lameid: 15618
+    - id: weather_cloudy_night
+      lameid: 12195
+      
+
+    - id: little_house
+      lameid: 16041
+    - id: temp_house
+      lameid: 40207
+      
+    - id: stork_delievers_baby
+      lameid: 365
+    - id: scorpion
+      lameid: 2589
+    - id: singing_penguin
+      lameid: 4384
+      
+    - id: water_plant1
+      lameid: 7699
+    - id: water_plant2
+      lameid: 23634
+
+
+    - id: Calendar_red_white
+      lameid: 3575
+    - id: Calendar_blue_white
+      lameid: 55812
+
+    - id: printer_work
+      lameid: 55700
+    - id: bell
+      lameid: 2883
+
+    - id: anime_space
+      lameid: 479
+    - id: cat1
+      lameid: 9973
+    - id: cat2
+      lameid: 13129
+    - id: tetris
+      lameid: 6537
+    - id: homer
+      lameid: 1624
+
+    - id: yoshisun
+      url: https://awtrix.blueforcer.de/animations/yoshisun
+      resize: 32x8
+    - id: DOGE
+      url: https://awtrix.blueforcer.de/animations/DOGE
+      resize: 32x8
+    - id: Fire2
+      url: https://awtrix.blueforcer.de/animations/Fire2
+      resize: 32x8
+    - id: PacMan
+      url: https://awtrix.blueforcer.de/animations/PacMan
+      resize: 32x8
+    - id: Raindrops
+      url: https://awtrix.blueforcer.de/animations/Raindrops
+      resize: 32x8
+    - id: Shockwave
+      url: https://awtrix.blueforcer.de/animations/Shockwave
+      resize: 32x8
+    - id: Smiley
+      url: https://awtrix.blueforcer.de/animations/Smiley
+      resize: 32x8
+
+  on_start_running:
+      then:
+        - ds1307.read_time:
+        - script.execute: put_day_clock
+        - script.execute: put_infotext_color
+  # on_next_screen:
+  #   - homeassistant.event:
+  #       event: esphome.next_screen
+  #       data_template:
+  #         iconname: !lambda "return icon.c_str();"
+  #         text: !lambda "return text.c_str();"
+
