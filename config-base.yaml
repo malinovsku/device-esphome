@@ -1,16 +1,18 @@
 esphome:
   name: ${device_name}
+  friendly_name: ${friendly_name}
   name_add_mac_suffix: false
+
+logger:
 
 api:
   reboot_timeout: 50min
   encryption:
     key: !secret api_key_tok
+
 ota:
   password: !secret ota_api_password
   reboot_timeout: 50min
-
-logger:
 
 wifi:
   ssid: !secret wiwi_ssid
@@ -25,44 +27,31 @@ captive_portal:
 
 sensor:
   - platform: wifi_signal
-    name: ${device_name2} wifi signal esp
+    name: Wifi signal esp
     update_interval: 60s
-    entity_category: diagnostic
-
-  - platform: uptime
-    id: uptime_sensor
-    update_interval: 5min
-    on_raw_value:
-      then:
-        - text_sensor.template.publish:
-            id: uptime_esp
-            state: !lambda |-
-              int seconds = round(id(uptime_sensor).raw_state);
-              int days = seconds / (24 * 3600);
-              seconds = seconds % (24 * 3600);
-              int hours = seconds / 3600;
-              seconds = seconds % 3600;
-              int minutes = seconds /  60;
-              seconds = seconds % 60;
-              return (
-                (days ? String(days) + "d " : "") +
-                (hours ? String(hours) + "h " : "") +
-                (String(minutes) + "m")
-              ).c_str();
-
-button:
-  - platform: restart
-    name: ${device_name2} restart esp
-    entity_category: diagnostic
-
-binary_sensor:
-  - platform: status
-    name: ${device_name2} status esp
     entity_category: diagnostic
 
 text_sensor:
   - platform: template
-    name: ${device_name2} uptime esp
+    name: Uptime esp
     id: uptime_esp
     icon: mdi:clock-start
+    entity_category: diagnostic
+    update_interval: 5min
+    lambda: |-
+      uint32_t dur=millis()/1000;
+      char buffer[19];
+      if(dur>=86400) sprintf(buffer,"%ud %uh %02um", dur/86400, dur%86400/3600, dur%3600/60);
+      else if(dur>=3600) sprintf(buffer,"%uh %02um", dur/3600, dur%3600/60);
+      else sprintf(buffer,"%um", dur/60);
+      return {buffer};
+
+button:
+  - platform: restart
+    name: Restart esp
+    entity_category: diagnostic
+
+binary_sensor:
+  - platform: status
+    name: Status esp
     entity_category: diagnostic
